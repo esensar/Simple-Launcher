@@ -117,7 +117,7 @@ class HomeScreenDock(context: Context, attrs: AttributeSet, defStyle: Int) : Bas
         }
     }
 
-    fun removeAppIcon(item: HomeScreenGridItem) {
+    override fun removeItem(item: HomeScreenGridItem) {
         ensureBackgroundThread {
             removeItemFromDock(item)
 
@@ -135,7 +135,6 @@ class HomeScreenDock(context: Context, attrs: AttributeSet, defStyle: Int) : Bas
     }
 
     override fun drawGridIcon(item: HomeScreenGridItem, canvas: Canvas, extraXMargin: Int, extraYMargin: Int) {
-        Log.d("TESTENSAR", "drawGridIcon() called with: item = $item, canvas = $canvas, extraXMargin = $extraXMargin, extraYMargin = $extraYMargin")
         val drawableX = cellXCoords[item.left] + iconMargin + extraXMargin + sideMargins.left
         val drawableY = cellYCoords[item.top] + iconMargin * 2 + extraYMargin + sideMargins.top
         item.drawable!!.setBounds(drawableX, drawableY, drawableX + iconSize, drawableY + iconSize)

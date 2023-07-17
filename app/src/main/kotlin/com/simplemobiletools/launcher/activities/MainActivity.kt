@@ -17,11 +17,8 @@ import android.content.res.Configuration
 import android.graphics.Bitmap
 import android.graphics.Color
 import android.graphics.Rect
-import android.net.Uri
 import android.os.Bundle
 import android.os.Handler
-import android.provider.Telephony
-import android.telecom.TelecomManager
 import android.view.*
 import android.view.animation.DecelerateInterpolator
 import android.widget.PopupMenu
@@ -217,6 +214,10 @@ class MainActivity : SimpleActivity(), FlingListener {
             newRowCount = 1,
             newColumnCount = config.homeColumnCount
         )
+        home_screen_grid?.onIconSizeChangedListener = {
+            home_screen_dock?.suggestedIconSize = it
+            main_holder.requestLayout()
+        }
         (all_apps_fragment as? AllAppsFragment)?.onResume()
     }
 
@@ -303,11 +304,13 @@ class MainActivity : SimpleActivity(), FlingListener {
                     mOpenPopupMenu?.dismiss()
                     mOpenPopupMenu = null
                     home_screen_grid.itemDraggingStarted(mLongPressedIcon!!)
+                    home_screen_dock.itemDraggingStarted(mLongPressedIcon!!)
                     hideFragment(all_apps_fragment)
                 }
 
                 if (mLongPressedIcon != null && hasFingerMoved) {
                     home_screen_grid.draggedItemMoved(event.x.toInt(), event.y.toInt())
+                    home_screen_dock.draggedItemMoved(event.x.toInt(), event.y.toInt())
                 }
 
                 if (mTouchDownY != -1 && !mIgnoreMoveEvents) {
@@ -333,7 +336,15 @@ class MainActivity : SimpleActivity(), FlingListener {
                 mLongPressedIcon = null
                 mLastTouchCoords = Pair(-1f, -1f)
                 resetFragmentTouches()
-                home_screen_grid.itemDraggingStopped()
+                val placedOnGrid = home_screen_grid.itemDraggingStopped()
+                val placedOnDock = home_screen_dock.itemDraggingStopped()
+
+                if (placedOnGrid) {
+                    home_screen_dock.draggedItemPlacedElsewhere()
+                }
+                if (placedOnDock) {
+                    home_screen_grid.draggedItemPlacedElsewhere()
+                }
 
                 if (!mIgnoreUpEvent) {
                     if (all_apps_fragment.y < mScreenHeight * 0.5) {
@@ -435,30 +446,39 @@ class MainActivity : SimpleActivity(), FlingListener {
             return
         }
 
-        val (x, y) = home_screen_grid.intoViewSpaceCoords(eventX, eventY)
         mIgnoreMoveEvents = true
-        val clickedGridItem = home_screen_grid.isClickingGridItem(x.toInt(), y.toInt())
-        if (clickedGridItem != null) {
-            if (clickedGridItem.type == ITEM_TYPE_ICON || clickedGridItem.type == ITEM_TYPE_SHORTCUT) {
+        val clickedItem = getClickedItem(eventX, eventY)
+        if (clickedItem != null) {
+            if (clickedItem.type == ITEM_TYPE_ICON || clickedItem.type == ITEM_TYPE_SHORTCUT) {
                 main_holder.performHapticFeedback()
             }
 
-            val anchorY = home_screen_grid.sideMargins.top + (clickedGridItem.top * home_screen_grid.cellHeight.toFloat())
-            showHomeIconMenu(x, anchorY, clickedGridItem, false)
+            val anchorY = home_screen_grid.sideMargins.top + (clickedItem.top * home_screen_grid.cellHeight.toFloat())
+            showHomeIconMenu(eventX, anchorY, clickedItem, false)
             return
         }
 
         main_holder.performHapticFeedback()
-        showMainLongPressMenu(x, y)
+        showMainLongPressMenu(eventX, eventY)
     }
 
     fun homeScreenClicked(eventX: Float, eventY: Float) {
         home_screen_grid.hideResizeLines()
+        val clickedItem = getClickedItem(eventX, eventY)
+        if (clickedItem != null) {
+            onItemClicked(clickedItem)
+        }
+    }
+
+    private fun getClickedItem(eventX: Float, eventY: Float): HomeScreenGridItem? {
         val (x, y) = home_screen_grid.intoViewSpaceCoords(eventX, eventY)
         val clickedGridItem = home_screen_grid.isClickingGridItem(x.toInt(), y.toInt())
         if (clickedGridItem != null) {
-            onItemClicked(clickedGridItem)
+            return clickedGridItem
         }
+
+        val (dockX, dockY) = home_screen_dock.intoViewSpaceCoords(eventX, eventY)
+        return home_screen_dock.isClickingGridItem(dockX.toInt(), dockY.toInt())
     }
 
     private fun onItemClicked(clickedGridItem: HomeScreenGridItem) {
@@ -561,7 +581,7 @@ class MainActivity : SimpleActivity(), FlingListener {
                     R.id.rename -> renameItem(gridItem)
                     R.id.resize -> home_screen_grid.widgetLongPressed(gridItem)
                     R.id.app_info -> launchAppInfo(gridItem.packageName)
-                    R.id.remove -> home_screen_grid.removeAppIcon(gridItem)
+                    R.id.remove -> home_screen_grid.removeItem(gridItem)
                     R.id.uninstall -> uninstallApp(gridItem.packageName)
                 }
                 true

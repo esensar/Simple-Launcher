@@ -77,7 +77,7 @@ class HomeScreenGrid(context: Context, attrs: AttributeSet, defStyle: Int) : Bas
         }
     }
 
-    fun removeAppIcon(item: HomeScreenGridItem) {
+    override fun removeItem(item: HomeScreenGridItem) {
         ensureBackgroundThread {
             removeItemFromHomeScreen(item)
             post {
@@ -102,12 +102,12 @@ class HomeScreenGrid(context: Context, attrs: AttributeSet, defStyle: Int) : Bas
     }
 
     // figure out at which cell was the item dropped, if it is empty
-    override fun itemDraggingStopped() {
+    override fun itemDraggingStopped(): Boolean {
         widgetViews.forEach {
             it.hasLongPressed = false
         }
 
-        super.itemDraggingStopped()
+        return super.itemDraggingStopped()
     }
 
     override fun drawGridIcon(item: HomeScreenGridItem, canvas: Canvas, extraXMargin: Int, extraYMargin: Int) {

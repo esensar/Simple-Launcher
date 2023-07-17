@@ -3,9 +3,7 @@ package com.simplemobiletools.launcher.views
 import android.annotation.SuppressLint
 import android.content.Context
 import android.graphics.*
-import android.text.TextPaint
 import android.util.AttributeSet
-import android.util.Log
 import android.widget.RelativeLayout
 import com.simplemobiletools.commons.extensions.*
 import com.simplemobiletools.launcher.R
@@ -26,6 +24,12 @@ abstract class BaseLauncherGrid(context: Context, attrs: AttributeSet, defStyle:
     protected var draggedItem: HomeScreenGridItem? = null
     private var isFirstDraw = true
     protected var iconSize = 0
+        set(value) {
+            if (value != field) {
+                onIconSizeChangedListener?.invoke(value)
+            }
+            field = value
+        }
     private var drawDebugGrid = false
     private var drawDebugClickableAreas = false
     private var debugGridPaint: Paint
@@ -39,6 +43,10 @@ abstract class BaseLauncherGrid(context: Context, attrs: AttributeSet, defStyle:
     var cellHeight = 0
 
     var resizedInThisFrame = false
+
+    var suggestedIconSize: Int? = null
+
+    var onIconSizeChangedListener: ((Int) -> Unit)? = null
 
     // apply fake margins at the home screen. Real ones would cause the icons be cut at dragging at screen sides
     var sideMargins = Rect()
@@ -106,21 +114,30 @@ abstract class BaseLauncherGrid(context: Context, attrs: AttributeSet, defStyle:
             }
         }
 
-        draggedItemCurrentCoords = Pair(x, y)
+        draggedItemCurrentCoords = intoViewSpaceCoords(x, y)
         redrawGrid()
     }
 
     open fun onDraggedWidgetMoved(x: Int, y: Int) {}
 
     // figure out at which cell was the item dropped, if it is empty
-    open fun itemDraggingStopped() {
-        if (draggedItem == null) {
-            return
+    open fun itemDraggingStopped(): Boolean {
+        if (draggedItem == null || draggedItem?.outOfBounds() == true) {
+            return false
         }
 
         when (draggedItem!!.type) {
             ITEM_TYPE_ICON, ITEM_TYPE_SHORTCUT -> addAppIconOrShortcut()
             ITEM_TYPE_WIDGET -> addWidget()
+        }
+        return true
+    }
+
+    fun draggedItemPlacedElsewhere() {
+        draggedItem?.also {
+            draggedItem = null
+            draggedItemCurrentCoords = Pair(-1, -1)
+            removeItem(it)
         }
     }
 
@@ -148,6 +165,15 @@ abstract class BaseLauncherGrid(context: Context, attrs: AttributeSet, defStyle:
 
     protected fun getFakeHeight() = height - sideMargins.top - sideMargins.bottom
 
+    override fun onMeasure(widthMeasureSpec: Int, heightMeasureSpec: Int) {
+        if (suggestedIconSize != null) {
+            setMeasuredDimension(getDefaultSize(suggestedMinimumWidth, widthMeasureSpec),
+                getDefaultSize(sideMargins.top + sideMargins.bottom + suggestedIconSize!! + 2 * iconMargin, heightMeasureSpec));
+        } else {
+            super.onMeasure(widthMeasureSpec, heightMeasureSpec)
+        }
+    }
+
     @SuppressLint("DrawAllocation")
     override fun onDraw(canvas: Canvas?) {
         if (canvas == null) {
@@ -170,9 +196,7 @@ abstract class BaseLauncherGrid(context: Context, attrs: AttributeSet, defStyle:
             0
         }
         gridItems.filter { it.drawable != null && (it.type == ITEM_TYPE_ICON || it.type == ITEM_TYPE_SHORTCUT) }.forEach { item ->
-            Log.d("TESTENSAR", "onDraw ($this) = attempt to draw $item")
             if (item.outOfBounds()) {
-                Log.d("TESTENSAR", "onDraw ($this) = OUT OF BOUNDS :(")
                 return@forEach
             }
 
@@ -188,7 +212,7 @@ abstract class BaseLauncherGrid(context: Context, attrs: AttributeSet, defStyle:
             resizedInThisFrame = false
         }
 
-        if (draggedItem != null && draggedItemCurrentCoords.first != -1 && draggedItemCurrentCoords.second != -1) {
+        if (draggedItem != null && !draggedItem!!.outOfBounds() && draggedItemCurrentCoords.first != -1 && draggedItemCurrentCoords.second != -1) {
             if (draggedItem!!.type == ITEM_TYPE_ICON || draggedItem!!.type == ITEM_TYPE_SHORTCUT) {
                 // draw a circle under the current cell
                 val center = gridCenters.minBy {
@@ -270,7 +294,7 @@ abstract class BaseLauncherGrid(context: Context, attrs: AttributeSet, defStyle:
     private fun fillCellSizes() {
         cellWidth = getFakeWidth() / columnCount
         cellHeight = getFakeHeight() / rowCount
-        iconSize = min(cellWidth, cellHeight) - 2 * iconMargin
+        iconSize = suggestedIconSize ?: (min(cellWidth, cellHeight) - 2 * iconMargin)
         for (i in 0 until columnCount) {
             cellXCoords.add(i, i * cellWidth)
         }
@@ -340,7 +364,17 @@ abstract class BaseLauncherGrid(context: Context, attrs: AttributeSet, defStyle:
         return Pair(x, y)
     }
 
+    fun intoViewSpaceCoords(screenSpaceX: Int, screenSpaceY: Int): Pair<Int, Int> {
+        val viewLocation = IntArray(2)
+        getLocationOnScreen(viewLocation)
+        val x = screenSpaceX - viewLocation[0]
+        val y = screenSpaceY - viewLocation[1]
+        return Pair(x, y)
+    }
+
     protected fun HomeScreenGridItem.outOfBounds(): Boolean {
         return (left >= cellXCoords.size || right >= cellXCoords.size || top >= cellYCoords.size || bottom >= cellYCoords.size)
     }
+
+    abstract fun removeItem(item: HomeScreenGridItem)
 }
