@@ -210,7 +210,11 @@ class MainActivity : SimpleActivity(), FlingListener {
         }
 
         home_screen_grid?.resizeGrid(
-            newRowCount = config.homeRowCount,
+            newRowCount = config.homeRowCount - 1,
+            newColumnCount = config.homeColumnCount
+        )
+        home_screen_dock?.resizeGrid(
+            newRowCount = 1,
             newColumnCount = config.homeColumnCount
         )
         (all_apps_fragment as? AllAppsFragment)?.onResume()
@@ -376,7 +380,6 @@ class MainActivity : SimpleActivity(), FlingListener {
 
         if (!config.wasHomeScreenInit) {
             ensureBackgroundThread {
-                getDefaultAppPackages(launchers)
                 config.wasHomeScreenInit = true
                 home_screen_grid.fetchGridItems()
             }
@@ -454,20 +457,24 @@ class MainActivity : SimpleActivity(), FlingListener {
         val (x, y) = home_screen_grid.intoViewSpaceCoords(eventX, eventY)
         val clickedGridItem = home_screen_grid.isClickingGridItem(x.toInt(), y.toInt())
         if (clickedGridItem != null) {
-            if (clickedGridItem.type == ITEM_TYPE_ICON) {
-                launchApp(clickedGridItem.packageName, clickedGridItem.activityName)
-            } else if (clickedGridItem.type == ITEM_TYPE_SHORTCUT) {
-                if (clickedGridItem.intent.isNotEmpty()) {
-                    launchShortcutIntent(clickedGridItem)
-                } else {
-                    // launch pinned shortcuts
-                    val id = clickedGridItem.shortcutId
-                    val packageName = clickedGridItem.packageName
-                    val userHandle = android.os.Process.myUserHandle()
-                    val shortcutBounds = home_screen_grid.getClickableRect(clickedGridItem)
-                    val launcherApps = applicationContext.getSystemService(Context.LAUNCHER_APPS_SERVICE) as LauncherApps
-                    launcherApps.startShortcut(packageName, id, shortcutBounds, null, userHandle)
-                }
+            onItemClicked(clickedGridItem)
+        }
+    }
+
+    private fun onItemClicked(clickedGridItem: HomeScreenGridItem) {
+        if (clickedGridItem.type == ITEM_TYPE_ICON) {
+            launchApp(clickedGridItem.packageName, clickedGridItem.activityName)
+        } else if (clickedGridItem.type == ITEM_TYPE_SHORTCUT) {
+            if (clickedGridItem.intent.isNotEmpty()) {
+                launchShortcutIntent(clickedGridItem)
+            } else {
+                // launch pinned shortcuts
+                val id = clickedGridItem.shortcutId
+                val packageName = clickedGridItem.packageName
+                val userHandle = android.os.Process.myUserHandle()
+                val shortcutBounds = home_screen_grid.getClickableRect(clickedGridItem)
+                val launcherApps = applicationContext.getSystemService(Context.LAUNCHER_APPS_SERVICE) as LauncherApps
+                launcherApps.startShortcut(packageName, id, shortcutBounds, null, userHandle)
             }
         }
     }
@@ -699,67 +706,6 @@ class MainActivity : SimpleActivity(), FlingListener {
         allApps.add(launcherSettings)
         launchersDB.insertAll(allApps)
         return allApps
-    }
-
-    private fun getDefaultAppPackages(appLaunchers: ArrayList<AppLauncher>) {
-        val homeScreenGridItems = ArrayList<HomeScreenGridItem>()
-        try {
-            val defaultDialerPackage = (getSystemService(Context.TELECOM_SERVICE) as TelecomManager).defaultDialerPackage
-            appLaunchers.firstOrNull { it.packageName == defaultDialerPackage }?.apply {
-                val dialerIcon =
-                    HomeScreenGridItem(null, 0, config.homeRowCount - 1, 0, config.homeRowCount - 1, defaultDialerPackage, "", title, ITEM_TYPE_ICON, "", -1, "", "", null)
-                homeScreenGridItems.add(dialerIcon)
-            }
-        } catch (e: Exception) {
-        }
-
-        try {
-            val defaultSMSMessengerPackage = Telephony.Sms.getDefaultSmsPackage(this)
-            appLaunchers.firstOrNull { it.packageName == defaultSMSMessengerPackage }?.apply {
-                val SMSMessengerIcon =
-                    HomeScreenGridItem(null, 1, config.homeRowCount - 1, 1, config.homeRowCount - 1, defaultSMSMessengerPackage, "", title, ITEM_TYPE_ICON, "", -1, "", "", null)
-                homeScreenGridItems.add(SMSMessengerIcon)
-            }
-        } catch (e: Exception) {
-        }
-
-        try {
-            val browserIntent = Intent("android.intent.action.VIEW", Uri.parse("http://"))
-            val resolveInfo = packageManager.resolveActivity(browserIntent, PackageManager.MATCH_DEFAULT_ONLY)
-            val defaultBrowserPackage = resolveInfo!!.activityInfo.packageName
-            appLaunchers.firstOrNull { it.packageName == defaultBrowserPackage }?.apply {
-                val browserIcon =
-                    HomeScreenGridItem(null, 2, config.homeRowCount - 1, 2, config.homeRowCount - 1, defaultBrowserPackage, "", title, ITEM_TYPE_ICON, "", -1, "", "", null)
-                homeScreenGridItems.add(browserIcon)
-            }
-        } catch (e: Exception) {
-        }
-
-        try {
-            val potentialStores = arrayListOf("com.android.vending", "org.fdroid.fdroid", "com.aurora.store")
-            val storePackage = potentialStores.firstOrNull { isPackageInstalled(it) && appLaunchers.map { it.packageName }.contains(it) }
-            if (storePackage != null) {
-                appLaunchers.firstOrNull { it.packageName == storePackage }?.apply {
-                    val storeIcon = HomeScreenGridItem(null, 3, config.homeRowCount - 1, 3, config.homeRowCount - 1, storePackage, "", title, ITEM_TYPE_ICON, "", -1, "", "", null)
-                    homeScreenGridItems.add(storeIcon)
-                }
-            }
-        } catch (e: Exception) {
-        }
-
-        try {
-            val cameraIntent = Intent("android.media.action.IMAGE_CAPTURE")
-            val resolveInfo = packageManager.resolveActivity(cameraIntent, PackageManager.MATCH_DEFAULT_ONLY)
-            val defaultCameraPackage = resolveInfo!!.activityInfo.packageName
-            appLaunchers.firstOrNull { it.packageName == defaultCameraPackage }?.apply {
-                val cameraIcon =
-                    HomeScreenGridItem(null, 4, config.homeRowCount - 1, 4, config.homeRowCount - 1, defaultCameraPackage, "", title, ITEM_TYPE_ICON, "", -1, "", "", null)
-                homeScreenGridItems.add(cameraIcon)
-            }
-        } catch (e: Exception) {
-        }
-
-        homeScreenGridItemsDB.insertAll(homeScreenGridItems)
     }
 
     fun handleWidgetBinding(
